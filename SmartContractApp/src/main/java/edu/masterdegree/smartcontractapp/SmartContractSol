@@ -1,0 +1,114 @@
+pragma solidity ^0.4.21;
+
+contract Territory {
+
+
+    string territoryID;
+    address owner;
+
+    function Territory (string _territoryID) public
+    {
+        owner = msg.sender;
+        territoryID = _territoryID;
+    }
+
+    function getOwner() public constant returns (address)
+    {
+        return owner;
+    }
+
+    function setOwner(address _new_owner, address _contractForSell) public
+    {
+        require( SellTerritory(_contractForSell).getContractOwner() == owner );
+        owner = _new_owner;
+    }
+
+    function getTerritoryID() public constant returns (string)
+    {
+        return territoryID;
+    }
+}
+
+contract SellTerritory{
+
+    string public name;
+    string public description;
+    address public seller;
+    address public contractOwner;
+    address public territoryAdresss;
+
+    Territory public toSellTerritory;
+
+    uint public price;
+    uint public status;
+
+    function SellTerritory (
+                string _name,
+                string _description,
+                address _seller,
+                address _territory,
+                uint _price) public {
+
+        require ( address(_seller) == msg.sender);
+        toSellTerritory = Territory(_territory);
+        require (_seller == toSellTerritory.getOwner() );
+
+        name = _name;
+        description = _description;
+
+        territoryAdresss = _territory;
+        seller = _seller;
+        contractOwner = msg.sender;
+        price = _price;
+        status = 0;
+    }
+
+    function buy() public payable
+    {
+        require( msg.sender != contractOwner ); /*To avoid resell to himself.*/
+        require( msg.value == price + 2300 /* Commision for transfer */ ); /* Check amount attached to transaction. */
+        require( status == 0);
+
+        toSellTerritory = Territory(territoryAdresss);
+        toSellTerritory.setOwner(msg.sender, this); /* Perform change of owner. */
+
+        status = 1;
+        seller.transfer(price); /*Transfer money from sender to seller who create contract. */
+    }
+
+    function getOwnerFromTerritory() public view returns (address)
+    {
+        return toSellTerritory.getOwner();
+    }
+
+    function getPrice() public view returns (uint)
+    {
+        return price;
+    }
+
+    function getContractOwner() public view returns (address)
+    {
+        return contractOwner;
+    }
+
+    function getName() public view returns (string)
+    {
+        return name;
+
+    }
+
+    function getDesction() public view returns (string)
+    {
+        return description;
+    }
+
+    function getTerritoryID() public view returns (address)
+    {
+        return territoryAdresss;
+    }
+
+    function getStatus() public view returns (uint)
+    {
+        return status;
+    }
+}
