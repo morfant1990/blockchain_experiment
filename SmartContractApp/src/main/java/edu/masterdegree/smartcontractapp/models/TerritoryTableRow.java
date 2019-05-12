@@ -12,4 +12,5 @@ package edu.masterdegree.smartcontractapp.models;
 public interface TerritoryTableRow {
     String getTerritoryID();
     String getOwnerID();
+    String getTerritoryContractID();
 }

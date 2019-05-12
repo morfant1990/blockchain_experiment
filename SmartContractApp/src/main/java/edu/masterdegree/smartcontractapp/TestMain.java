@@ -1,45 +1,77 @@
 package edu.masterdegree.smartcontractapp;
 
-import net.miginfocom.swing.MigLayout;
-import org.web3j.abi.FunctionEncoder;
-import org.web3j.abi.datatypes.Type;
-
-import javax.swing.*;
-import java.awt.*;
-import java.math.BigInteger;
-import java.util.Arrays;
-import java.util.UUID;
+import java.sql.*;
 
 public class TestMain {
 
-    private static String login = "0x2bc9f77f9d34bfcd6779cfe9e9d07e62b7d1afb8";
+    private final String url = "jdbc:postgresql://localhost:5432/postgres";
+    private final String user = "postgres";
+    private final String password = "1234";
 
-    public static void main(String[] args) {
+    public Connection connect() throws SQLException {
 
-        JTextField nameField = new JTextField(15);
-        JTextField descriptionField = new JTextField(15);
-        SpinnerNumberModel spinnerNumberModel = new SpinnerNumberModel(100, 1, Integer.MAX_VALUE, 100);
-        JSpinner priceSpinner = new JSpinner(spinnerNumberModel);
-        String[] territoriesIDs = {"32","35454"};
-        JComboBox<String> territoryCombobox = new JComboBox<>(territoriesIDs);
-        JPanel myPanel = new JPanel();
-        myPanel.setLayout(new MigLayout("fillx"));
+        try {
+            Class.forName("org.postgresql.Driver");
+        } catch (ClassNotFoundException e) {
+            System.out.println("PostgreSQL JDBC Driver is not found. Include it in your library path ");
+            e.printStackTrace();
 
-        myPanel.add(new JLabel("Имя:"));
-        myPanel.add(nameField, "wrap");
-        myPanel.add(new JLabel("Описание:"));
-        myPanel.add(descriptionField, "wrap");
-        myPanel.add(new JLabel("Цена:"));
-        myPanel.add(priceSpinner, "wrap");
-        myPanel.add(new JLabel("Территория:"));
-        myPanel.add(territoryCombobox);
-
-
-        int result = JOptionPane.showConfirmDialog(null, myPanel,
-                "Новый контракт", JOptionPane.OK_CANCEL_OPTION);
-        if (result == JOptionPane.OK_OPTION) {
-            System.out.println("x value: " + nameField.getText());
-            System.out.println("y value: " + descriptionField.getText());
         }
+
+        return DriverManager.getConnection(url, user, password);
+    }
+
+    private static String currentUser = "0x2bc9f77f9d34bfcd6779cfe9e9d07e62b7d1afb8";
+
+    public static void main(String[] args) throws SQLException {
+        TestMain test = new TestMain();
+
+        Connection con = test.connect();
+
+        System.out.println("Con = " + con);
+
+        PreparedStatement preparedStatement = null;
+        // ? - место вставки нашего значеня
+        preparedStatement = con.prepareStatement(
+                "select contract_id from territories\n" +
+                        "where owner_id = ?");
+
+        preparedStatement.setString(1, currentUser);
+
+        ResultSet resultSet = preparedStatement.executeQuery();
+
+        while (resultSet.next())
+        {
+            System.out.println(resultSet.getString(1));
+        }
+
+        preparedStatement = con.prepareStatement("" +
+                "INSERT INTO territories(owner_id, contract_id)\n" +
+                "VALUES\n" +
+                " (?, ?)");
+        preparedStatement.setString(1, currentUser);
+        preparedStatement.setString(2,"test");
+
+        preparedStatement.executeUpdate();
+
+        preparedStatement = con.prepareStatement(
+                "select contract_id from territories\n" +
+                        "where owner_id = ?");
+
+        preparedStatement.setString(1, currentUser);
+
+        resultSet = preparedStatement.executeQuery();
+
+        while (resultSet.next())
+        {
+            System.out.println(resultSet.getString(1));
+        }
+
+        preparedStatement = con.prepareStatement("delete from territories where owner_id = ?");
+        preparedStatement.setString(1, currentUser);
+        preparedStatement.executeUpdate();
+
+     //   con.commit();
+
     }
 }

@@ -71,4 +71,18 @@ public class AddsTableModel extends AbstractTableModel {
                 TableModelEvent.ALL_COLUMNS, TableModelEvent.INSERT));
     }
 
+    public void deleteAllRows()
+    {
+        int size = getRowCount();
+        addRows.clear();
+        fireTableChanged(new TableModelEvent(this, 0, size,
+                TableModelEvent.ALL_COLUMNS, TableModelEvent.DELETE));
+    }
+
+    public void removeRow(int removeRow)
+    {
+        addRows.remove(removeRow);
+        fireTableChanged(new TableModelEvent(this, 0, removeRow,
+                TableModelEvent.ALL_COLUMNS, TableModelEvent.DELETE));
+    }
 }

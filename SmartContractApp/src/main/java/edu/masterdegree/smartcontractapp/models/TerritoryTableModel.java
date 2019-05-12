@@ -51,4 +51,13 @@ public class TerritoryTableModel extends AbstractTableModel {
         fireTableChanged(new TableModelEvent(this, lastRow, lastRow,
                 TableModelEvent.ALL_COLUMNS, TableModelEvent.INSERT));
     }
+
+    public void deleteAllRows()
+    {
+        int size = getRowCount();
+        territoryList.clear();
+        fireTableChanged(new TableModelEvent(this, 0, size,
+                TableModelEvent.ALL_COLUMNS, TableModelEvent.DELETE));
+
+    }
 }

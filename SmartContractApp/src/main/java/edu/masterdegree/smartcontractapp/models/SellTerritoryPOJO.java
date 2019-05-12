@@ -27,7 +27,7 @@ public class SellTerritoryPOJO {
     private String territoryContractID;
     private String terrritoryID;
 
-    public SellTerritoryPOJO(SellTerritory sellTerritory) {
+    public SellTerritoryPOJO(SellTerritory sellTerritory, String terrritoryID) {
         try {
             this.contractAddress = sellTerritory.getContractAddress();
             this.name = sellTerritory.getName().send();
@@ -35,7 +35,7 @@ public class SellTerritoryPOJO {
             this.price = sellTerritory.getPrice().send();
             this.sellerID = sellTerritory.getContractOwner().send();
             this.territoryContractID = sellTerritory.getTerritoryID().send();
-            this.terrritoryID = "Not Implemented Yet";
+            this.terrritoryID = terrritoryID;
         } catch (Exception ex) {
             log.error("Error = ", ex);
             throw new RuntimeException("Unexpected exception!", ex);

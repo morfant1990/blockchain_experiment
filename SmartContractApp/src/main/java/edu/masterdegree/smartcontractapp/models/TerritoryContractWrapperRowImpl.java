@@ -43,4 +43,9 @@ public class TerritoryContractWrapperRowImpl implements TerritoryTableRow {
         }
     }
 
+    @Override
+    public String getTerritoryContractID() {
+        throw new RuntimeException("Unsupported logic!");
+    }
+
 }

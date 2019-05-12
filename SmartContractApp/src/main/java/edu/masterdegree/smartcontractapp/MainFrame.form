@@ -8,6 +8,21 @@
           <Properties>
             <Property name="text" type="java.lang.String" value="&#x41c;&#x435;&#x43d;&#x44e;"/>
           </Properties>
+          <SubComponents>
+            <MenuItem class="javax.swing.JMenuItem" name="loginUserMenuItem">
+              <Properties>
+                <Property name="text" type="java.lang.String" value="&#x421;&#x43c;&#x435;&#x43d;&#x438;&#x442;&#x44c; &#x43f;&#x43e;&#x43b;&#x44c;&#x437;&#x43e;&#x432;&#x430;&#x442;&#x435;&#x43b;&#x44f;"/>
+              </Properties>
+              <Events>
+                <EventHandler event="actionPerformed" listener="java.awt.event.ActionListener" parameters="java.awt.event.ActionEvent" handler="loginUserMenuItemActionPerformed"/>
+              </Events>
+            </MenuItem>
+          </SubComponents>
+        </Menu>
+        <Menu class="javax.swing.JMenu" name="userNameMenu">
+          <Properties>
+            <Property name="text" type="java.lang.String" value="jMenu1"/>
+          </Properties>
         </Menu>
       </SubComponents>
     </Menu>
@@ -46,9 +61,6 @@
   </Layout>
   <SubComponents>
     <Container class="javax.swing.JTabbedPane" name="tabPannel">
-      <Properties>
-        <Property name="selectedIndex" type="int" value="2"/>
-      </Properties>
 
       <Layout class="org.netbeans.modules.form.compat2.layouts.support.JTabbedPaneSupportLayout"/>
       <SubComponents>

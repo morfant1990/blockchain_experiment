@@ -7,12 +7,11 @@ package edu.masterdegree.smartcontractapp;
 
 import edu.masterdegree.smartcontractapp.ethereum.SellTerritory;
 import edu.masterdegree.smartcontractapp.ethereum.Territory;
-import edu.masterdegree.smartcontractapp.models.AddsTableModel;
-import edu.masterdegree.smartcontractapp.models.SellTerritoryPOJO;
-import edu.masterdegree.smartcontractapp.models.SellTerritoryRow;
-import edu.masterdegree.smartcontractapp.models.TerritoryContractWrapperRowImpl;
-import edu.masterdegree.smartcontractapp.models.TerritoryTableModel;
-import java.io.IOException;
+import edu.masterdegree.smartcontractapp.models.*;
+
+import java.awt.*;
+import java.io.File;
+
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.web3j.crypto.Credentials;
@@ -22,18 +21,15 @@ import org.web3j.protocol.http.HttpService;
 import org.web3j.tx.Contract;
 
 import java.math.BigInteger;
+import java.sql.*;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
-import java.util.logging.Level;
-import javax.swing.JComboBox;
-import javax.swing.JLabel;
-import javax.swing.JOptionPane;
-import javax.swing.JPanel;
-import javax.swing.JSpinner;
-import javax.swing.JTextField;
-import javax.swing.SpinnerNumberModel;
+import javax.swing.*;
+
 import net.miginfocom.swing.MigLayout;
+import org.web3j.protocol.core.DefaultBlockParameterName;
+import org.web3j.protocol.core.methods.response.EthGetBalance;
 import org.web3j.protocol.core.methods.response.TransactionReceipt;
 
 /**
@@ -73,6 +69,8 @@ public class MainFrame extends javax.swing.JFrame {
         territoriesTable = new javax.swing.JTable();
         menuBar = new javax.swing.JMenuBar();
         mainMenu = new javax.swing.JMenu();
+        loginUserMenuItem = new javax.swing.JMenuItem();
+        userNameMenu = new javax.swing.JMenu();
 
         setDefaultCloseOperation(javax.swing.WindowConstants.EXIT_ON_CLOSE);
 
@@ -182,10 +180,20 @@ public class MainFrame extends javax.swing.JFrame {
 
         tabPannel.addTab("Существующие территории", terriroyPanel);
 
-        tabPannel.setSelectedIndex(2);
-
         mainMenu.setText("Меню");
+
+        loginUserMenuItem.setText("Сменить пользователя");
+        loginUserMenuItem.addActionListener(new java.awt.event.ActionListener() {
+            public void actionPerformed(java.awt.event.ActionEvent evt) {
+                loginUserMenuItemActionPerformed(evt);
+            }
+        });
+        mainMenu.add(loginUserMenuItem);
+
         menuBar.add(mainMenu);
+
+        userNameMenu.setText("jMenu1");
+        menuBar.add(userNameMenu);
 
         setJMenuBar(menuBar);
 
@@ -217,41 +225,322 @@ public class MainFrame extends javax.swing.JFrame {
 
             // Now lets deploy a smart contract
             log.info("Deploying smart contract");
-            
+
             Territory territory = Territory.
                     deploy(web3j, credentials, BigInteger.ZERO, Contract.GAS_LIMIT, UUID.randomUUID().toString()).
                     send();
             String contractAddress = territory.getContractAddress();
             log.info("Smart contract deployed to address " + contractAddress);
-            
-            territories.add(territory);
-            
-            ((TerritoryTableModel) territoriesTable.getModel()).addRow(new TerritoryContractWrapperRowImpl(territory));
+
+            addNewTerritoryContractToDB(currentUser, territory.getContractAddress());
+
+            TerritoryRowImpl territoryTableRow = new TerritoryRowImpl(territory);
+
+            territories.add(territoryTableRow);
+            allTerritories.add(territoryTableRow);
+
+            ((TerritoryTableModel) territoriesTable.getModel()).addRow(territoryTableRow);
         } catch (Exception ex) {
             log.error("Communication fail with error = ", ex);
         }
 
     }//GEN-LAST:event_addTerritoryButtonActionPerformed
 
+    public void loginUser()
+    {
+        JTextField loginFiled = new JTextField(25);
+        JPasswordField passwordField = new JPasswordField(25);
+
+        JPanel myPanel = new JPanel();
+        myPanel.setLayout(new MigLayout("fillx"));
+        myPanel.add(new Label("Имя пользователя:"));
+        myPanel.add(loginFiled, "wrap");
+        myPanel.add(new Label("Пароль:"));
+        myPanel.add(passwordField);
+
+        int result = -1;
+
+        while (result != JOptionPane.OK_OPTION){
+            result = JOptionPane.showConfirmDialog(null, myPanel,
+                    "Введите логин и пароль", JOptionPane.OK_CANCEL_OPTION);
+        }
+
+        currentUser = loginFiled.getText();
+        currentUserPassword = new String(passwordField.getPassword());
+
+        log.info("User = {} and password = {}", currentUser, currentUserPassword);
+
+        File folder = new File(keyStore);
+        String nonHex = currentUser.substring(2);
+
+        for (File file : folder.listFiles()) {
+            if (file.getName().contains(nonHex)) {
+                log.info("File with keystore = {}", file.getName());
+                currentUserKeyStore = file.getAbsolutePath();
+            }
+        }
+
+
+        try {
+// connect to node
+            Web3j web3 = Web3j.build(new HttpService());  // defaults to http://localhost:8545/
+
+// send asynchronous requests to get balance
+            EthGetBalance ethGetBalance = web3
+                    .ethGetBalance(currentUser, DefaultBlockParameterName.LATEST)
+                    .sendAsync()
+                    .get();
+
+            log.info("Get balance = "+ethGetBalance.getBalance());
+
+            Credentials credentials
+                    = WalletUtils.loadCredentials(
+                    currentUserPassword,
+                    currentUserKeyStore);
+
+            BigInteger wei = ethGetBalance.getBalance();
+
+            userNameMenu.setText("Пользователь " + currentUser+" (wei = " +wei + ")");
+
+            log.info("Load old data");
+
+            //Load all territories
+
+            allTerritories.clear();
+
+            List<String> allTerritoriesAddresses = loadAllTerritoriesContracts();
+            for(String territoryContractAdress:allTerritoriesAddresses){
+                Territory territory = Territory.load(territoryContractAdress, web3, credentials, BigInteger.ZERO, Contract.GAS_LIMIT);
+                TerritoryRowImpl territoryRow = new TerritoryRowImpl(territory);
+
+                allTerritories.add(territoryRow);
+
+            }
+
+            //Load my territories
+            List<String> territoryContracts = loadTerritoriesContracts(currentUser);
+
+            territories.clear();
+
+            ((TerritoryTableModel) territoriesTable.getModel()).deleteAllRows();
+
+            for(String territoryContractAdress:territoryContracts){
+                Territory territory = Territory.load(territoryContractAdress, web3, credentials, BigInteger.ZERO, Contract.GAS_LIMIT);
+                TerritoryRowImpl territoryRow = new TerritoryRowImpl(territory);
+
+                territories.add(territoryRow);
+
+                ((TerritoryTableModel) territoriesTable.getModel()).addRow(territoryRow);
+            }
+
+            //Load my adds
+
+            myAdds.clear();
+
+            ((AddsTableModel) addsTable.getModel()).deleteAllRows();
+
+            for(String myAddAddress:loadMyContracts(currentUser))
+            {
+                SellTerritory sellTerritory = SellTerritory.load(myAddAddress, web3, credentials, BigInteger.ZERO, Contract.GAS_LIMIT);
+                SellTerritoryPOJO sellTerritoryRow = new SellTerritoryPOJO(sellTerritory, getTerritoryByContractID(sellTerritory.getTerritoryID().send()).getTerritoryID());
+
+                myAdds.add(sellTerritoryRow);
+
+                ((AddsTableModel) addsTable.getModel()).addRow(new SellTerritoryRow(sellTerritoryRow));
+            }
+
+            //Load external adds
+
+            externalAdds.clear();
+
+            ((AddsTableModel) buyAddTable.getModel()).deleteAllRows();
+
+            for(String myAddAddress:loadExternalContracts(currentUser))
+            {
+                SellTerritory sellTerritory = SellTerritory.load(myAddAddress, web3, credentials, BigInteger.ZERO, Contract.GAS_LIMIT);
+                SellTerritoryPOJO sellTerritoryRow = new SellTerritoryPOJO(sellTerritory,getTerritoryByContractID(sellTerritory.getTerritoryID().send()).getTerritoryID());
+
+                externalAdds.add(sellTerritoryRow);
+
+                ((AddsTableModel) buyAddTable.getModel()).addRow(new SellTerritoryRow(sellTerritoryRow));
+            }
+
+
+        } catch (Exception ex) {
+            log.error("Unexpected exception = ", ex);
+        }
+    }
+
+    private void updateTerritoryOwner(String oldUser, String newUser, String territoryID) {
+        String query = "UPDATE territories set owner_id = ? where owner_id = ? and contract_id = ?";
+
+        log.info("Update territory for = {}, {} and {}", oldUser, newUser, territoryID);
+
+        try (PreparedStatement ps = getConnection().prepareStatement(query)) {
+            ps.setString(1, newUser);
+            ps.setString(2, oldUser);
+            ps.setString(3, territoryID);
+            ps.executeUpdate();
+
+        } catch (SQLException e) {
+            log.error("SQL Exception", e);
+        }
+    }
+
+    private void deleteContract(String contract)
+    {
+        String query = "DELETE from contract where contract_id = ?";
+
+        try (PreparedStatement ps = getConnection().prepareStatement(query)) {
+            ps.setString(1,contract);
+            ps.executeUpdate();
+
+        } catch (SQLException e) {
+            log.error("SQL Exception", e);
+        }
+    }
+
+    private void addNewContractToDB(String userId, String contract)
+    {
+        String query = "INSERT INTO contract(owner_id, contract_id)\n" +
+                "VALUES\n" +
+                " (?, ?)";
+
+        try (PreparedStatement ps = getConnection().prepareStatement(query)) {
+            ps.setString(1,userId);
+            ps.setString(2,contract);
+            ps.executeUpdate();
+
+        } catch (SQLException e) {
+            log.error("SQL Exception", e);
+        }
+    }
+
+    private List<String> loadMyContracts(String userId) {
+        String query = "select contract_id from contract\n" +
+                "                        where owner_id = ?";
+
+        List<String> contractIDs = new ArrayList<>();
+
+        try (PreparedStatement ps = getConnection().prepareStatement(query)) {
+            ps.setString(1,userId);
+            ResultSet resultSet = ps.executeQuery();
+
+            while(resultSet.next())
+            {
+                contractIDs.add(resultSet.getString(1));
+            }
+
+            resultSet.close();
+        } catch (SQLException e) {
+            log.error("SQL Exception", e);
+        }
+
+        return contractIDs;
+    }
+
+    private List<String> loadExternalContracts(String userId) {
+        String query = "select contract_id from contract\n" +
+                "                        where owner_id != ?";
+
+        List<String> contractIDs = new ArrayList<>();
+
+        try (PreparedStatement ps = getConnection().prepareStatement(query)) {
+            ps.setString(1,userId);
+            ResultSet resultSet = ps.executeQuery();
+
+            while(resultSet.next())
+            {
+                contractIDs.add(resultSet.getString(1));
+            }
+
+            resultSet.close();
+        } catch (SQLException e) {
+            log.error("SQL Exception", e);
+        }
+
+        return contractIDs;
+    }
+
+    private void addNewTerritoryContractToDB(String userId, String territoryContractID)
+    {
+        String query = "INSERT INTO territories(owner_id, contract_id)\n" +
+                "VALUES\n" +
+                " (?, ?)";
+
+        try (PreparedStatement ps = getConnection().prepareStatement(query)) {
+            ps.setString(1,userId);
+            ps.setString(2,territoryContractID);
+            ps.executeUpdate();
+
+        } catch (SQLException e) {
+            log.error("SQL Exception", e);
+        }
+    }
+
+    private List<String> loadAllTerritoriesContracts() {
+        String query = "select contract_id from territories";
+
+        List<String> territoryID = new ArrayList<>();
+
+        try (PreparedStatement ps = getConnection().prepareStatement(query)) {
+            ResultSet resultSet = ps.executeQuery();
+
+            while(resultSet.next())
+            {
+                territoryID.add(resultSet.getString(1));
+            }
+
+            resultSet.close();
+        } catch (SQLException e) {
+            log.error("SQL Exception", e);
+        }
+
+        return territoryID;
+    }
+
+    private List<String> loadTerritoriesContracts(String userId) {
+        String query = "select contract_id from territories\n" +
+                "                        where owner_id = ?";
+
+        List<String> territoryID = new ArrayList<>();
+
+        try (PreparedStatement ps = getConnection().prepareStatement(query)) {
+            ps.setString(1,userId);
+            ResultSet resultSet = ps.executeQuery();
+
+            while(resultSet.next())
+            {
+                territoryID.add(resultSet.getString(1));
+            }
+
+            resultSet.close();
+        } catch (SQLException e) {
+            log.error("SQL Exception", e);
+        }
+
+        return territoryID;
+    }
+
     private void addAddButtonActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_addAddButtonActionPerformed
         JTextField nameField = new JTextField(15);
         JTextField descriptionField = new JTextField(15);
         SpinnerNumberModel spinnerNumberModel = new SpinnerNumberModel(100, 1, Integer.MAX_VALUE, 100);
         JSpinner priceSpinner = new JSpinner(spinnerNumberModel);
-        
+
         List<String> terIDs = new ArrayList<>();
-        for (Territory territory : territories) {
+        for (TerritoryRowImpl territory : territories) {
             try {
-                terIDs.add(territory.getTerritoryID().send());
+                terIDs.add(territory.getTerritoryID());
             } catch (Exception ex) {
                 log.error("Error = ", ex);
             }
         }
-        
+
         JComboBox<String> territoryCombobox = new JComboBox<>(terIDs.toArray(new String[0]));
         JPanel myPanel = new JPanel();
         myPanel.setLayout(new MigLayout("fillx"));
-        
+
         myPanel.add(new JLabel("Имя:"));
         myPanel.add(nameField, "wrap");
         myPanel.add(new JLabel("Описание:"));
@@ -260,7 +549,7 @@ public class MainFrame extends javax.swing.JFrame {
         myPanel.add(priceSpinner, "wrap");
         myPanel.add(new JLabel("Территория:"));
         myPanel.add(territoryCombobox);
-        
+
         int result = JOptionPane.showConfirmDialog(null, myPanel,
                 "Новый контракт", JOptionPane.OK_CANCEL_OPTION);
         if (result == JOptionPane.OK_OPTION) {
@@ -271,7 +560,7 @@ public class MainFrame extends javax.swing.JFrame {
                 System.out.println("TerritoriID: " + territoryCombobox.getSelectedItem());
                 System.out.println("TerritoryContractID: " + searchTerritoryContractIDByTerritoryID((String) territoryCombobox.getSelectedItem()));
                 System.out.println("UserID: " + currentUser);
-                
+
                 Web3j web3j = Web3j.build(new HttpService());
                 log.info("Connected to Ethereum client version: "
                         + web3j.web3ClientVersion().send().getWeb3ClientVersion());
@@ -284,12 +573,12 @@ public class MainFrame extends javax.swing.JFrame {
 
                 // Now lets deploy a smart contract
                 log.info("Deploying smart contract");
-                
+
                 String territoryContractAdress = searchTerritoryContractIDByTerritoryID((String) territoryCombobox.getSelectedItem());
-                
+
                 Territory territory = Territory.load(territoryContractAdress, web3j, credentials, BigInteger.ZERO, Contract.GAS_LIMIT);
                 log.info("Load contract in same transaction = " + territory.getContractAddress());
-                
+
                 SellTerritory sellTerritory = SellTerritory.
                         deploy(web3j, credentials, BigInteger.ZERO, Contract.GAS_LIMIT,
                                 nameField.getText(),
@@ -300,12 +589,13 @@ public class MainFrame extends javax.swing.JFrame {
                         send();
                 String contractAddress = sellTerritory.getContractAddress();
                 log.info("Smart contract deployed to address " + contractAddress);
-                
-                ((AddsTableModel) addsTable.getModel()).addRow(new SellTerritoryRow(new SellTerritoryPOJO(sellTerritory)));
-                ((AddsTableModel) buyAddTable.getModel()).addRow(new SellTerritoryRow(new SellTerritoryPOJO(sellTerritory)));
-                
-                adds.add(new SellTerritoryPOJO(sellTerritory));
-                
+
+                SellTerritoryPOJO sellTerritoryPOJO = new SellTerritoryPOJO(sellTerritory, getTerritoryByContractID(sellTerritory.getTerritoryID().send()).getTerritoryID());
+                myAdds.add(sellTerritoryPOJO);
+                addNewContractToDB(currentUser, contractAddress);
+
+                ((AddsTableModel) addsTable.getModel()).addRow(new SellTerritoryRow(sellTerritoryPOJO));
+
             } catch (Exception ex) {
                 log.error("Error = ", ex);
             }
@@ -318,8 +608,8 @@ public class MainFrame extends javax.swing.JFrame {
             return;
         }
         try {
-            SellTerritoryPOJO sellTerritoryPOJO = adds.get(selectedRow);
-            
+            SellTerritoryPOJO sellTerritoryPOJO = externalAdds.get(selectedRow);
+
             Web3j web3j = Web3j.build(new HttpService());
             log.info("Connected to Ethereum client version: "
                     + web3j.web3ClientVersion().send().getWeb3ClientVersion());
@@ -332,7 +622,11 @@ public class MainFrame extends javax.swing.JFrame {
 
             // Now lets deploy a smart contract
             log.info("Deploying smart contract");
-            
+
+            Territory territory = Territory.load(sellTerritoryPOJO.getTerritoryContractID(), web3j, credentials, BigInteger.ZERO, Contract.GAS_LIMIT);
+            String oldOwner = territory.getOwner().send();
+            String territoryID = territory.getTerritoryID().send();
+
             SellTerritory sellTerritory = SellTerritory.load(sellTerritoryPOJO.getContractAddress(),
                     web3j,
                     credentials,
@@ -341,22 +635,46 @@ public class MainFrame extends javax.swing.JFrame {
             log.debug("Try to buy" + sellTerritory.getContractAddress());
             TransactionReceipt recepiet = sellTerritory.buy(sellTerritoryPOJO.getPrice().add(new BigInteger("2300"))).send();
             log.info("Result of tx = " + recepiet.toString());
-            
-            
-            
+
+
+            externalAdds.remove(selectedRow);
+            ((AddsTableModel) buyAddTable.getModel()).removeRow(selectedRow);
+            deleteContract(sellTerritory.getContractAddress());
+            updateTerritoryOwner(oldOwner, currentUser, territory.getContractAddress());
+
+            Territory updatedTerritory = Territory.load(sellTerritoryPOJO.getTerritoryContractID(), web3j, credentials, BigInteger.ZERO, Contract.GAS_LIMIT);
+
+            TerritoryRowImpl territoryRow = new TerritoryRowImpl(updatedTerritory);
+            territories.add(territoryRow);
+
+            ((TerritoryTableModel)territoriesTable.getModel()).addRow(territoryRow);
+
         } catch (Exception ex) {
             log.error("Error = ", ex);
         }
     }//GEN-LAST:event_buyButtonActionPerformed
-    
+
+    private void loginUserMenuItemActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_loginUserMenuItemActionPerformed
+        loginUser();
+    }//GEN-LAST:event_loginUserMenuItemActionPerformed
+
     private String searchTerritoryContractIDByTerritoryID(String territoryID) throws Exception {
-        
-        for (Territory territory : territories) {
-            if (territoryID.equals(territory.getTerritoryID().send())) {
-                return territory.getContractAddress();
+
+        for (TerritoryRowImpl territory : territories) {
+            if (territoryID.equals(territory.getTerritoryID())) {
+                return territory.getTerritoryContractID();
             }
         }
         throw new RuntimeException("Territory without contract!");
+    }
+
+    private TerritoryRowImpl getTerritoryByContractID(String territoryContract) {
+        for (TerritoryRowImpl territoryRow : allTerritories) {
+            if (territoryRow.getTerritoryContractID().equals(territoryContract)) {
+                return territoryRow;
+            }
+        }
+        throw new RuntimeException("Territory not fould!");
     }
 
     /**
@@ -366,7 +684,7 @@ public class MainFrame extends javax.swing.JFrame {
         /* Set the Nimbus look and feel */
         //<editor-fold defaultstate="collapsed" desc=" Look and feel setting code (optional) ">
         /* If Nimbus (introduced in Java SE 6) is not available, stay with the default look and feel.
-         * For details see http://download.oracle.com/javase/tutorial/uiswing/lookandfeel/plaf.html 
+         * For details see http://download.oracle.com/javase/tutorial/uiswing/lookandfeel/plaf.html
          */
         try {
             for (javax.swing.UIManager.LookAndFeelInfo info : javax.swing.UIManager.getInstalledLookAndFeels()) {
@@ -389,16 +707,44 @@ public class MainFrame extends javax.swing.JFrame {
         /* Create and display the form */
         java.awt.EventQueue.invokeLater(new Runnable() {
             public void run() {
-                new MainFrame().setVisible(true);
+
+                MainFrame mainFrame = new MainFrame();
+
+                mainFrame.loginUser();
+
+                mainFrame.setVisible(true);
             }
         });
     }
-    
+
+    private Connection getConnection() {
+        if (con == null) {
+            try {
+                Class.forName("org.postgresql.Driver");
+                con = DriverManager.getConnection(url, user, password);
+            } catch (Exception e) {
+                log.error("Connection obtain fail", e);
+                throw new RuntimeException("Connection to DB fail");
+            }
+        }
+        log.info("Get connection");
+
+        return con;
+    }
+
+    private Connection con;
+
+    private final String url = "jdbc:postgresql://localhost:5432/postgres";
+    private final String user = "postgres";
+    private final String password = "1234";
+
     private static final Logger log = LoggerFactory.getLogger(MainFrame.class);
-    
-    private List<Territory> territories = new ArrayList<>();
-    private List<SellTerritoryPOJO> adds = new ArrayList<>();
-    
+
+    private List<TerritoryRowImpl> territories = new ArrayList<>();
+    private List<TerritoryRowImpl> allTerritories = new ArrayList<>();
+    private List<SellTerritoryPOJO> myAdds = new ArrayList<>();
+    private List<SellTerritoryPOJO> externalAdds = new ArrayList<>();
+
     private String currentUser = "0x2bc9f77f9d34bfcd6779cfe9e9d07e62b7d1afb8";
     private String anotherUser = "0x62ea063a5e441250fac34852abead22ae7dee4fb";
     private String currentUserPassword = "Peer2peer1";
@@ -414,6 +760,7 @@ public class MainFrame extends javax.swing.JFrame {
     private javax.swing.JScrollPane buyAddPanel;
     private javax.swing.JTable buyAddTable;
     private javax.swing.JButton buyButton;
+    private javax.swing.JMenuItem loginUserMenuItem;
     private javax.swing.JMenu mainMenu;
     private javax.swing.JMenuBar menuBar;
     private javax.swing.JPanel myOrdersPanel;
@@ -423,5 +770,6 @@ public class MainFrame extends javax.swing.JFrame {
     private javax.swing.JTabbedPane tabPannel;
     private javax.swing.JPanel terriroyPanel;
     private javax.swing.JTable territoriesTable;
+    private javax.swing.JMenu userNameMenu;
     // End of variables declaration//GEN-END:variables
 }
